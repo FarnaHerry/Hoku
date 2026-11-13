@@ -89,7 +89,7 @@ else ()
     huxerui_use_library(hoku
             TARGET HuxerUI::WebView
             URL "https://github.com/FarnaHerry/Lib-WebView.git"
-            COMMIT "09c820a1d8d10237148b3e1d103beaacdcee0034"
+            COMMIT "bcd6776851fd3b582e654c8b31b63822e31af117"
     )
 endif ()
 
