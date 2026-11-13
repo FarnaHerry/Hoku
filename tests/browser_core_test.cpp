@@ -1,0 +1,88 @@
+#include "browser_session.h"
+#include "destination.h"
+
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+
+namespace {
+
+void ExpectEqual(std::string_view actual, std::string_view expected, std::string_view name) {
+  if (actual != expected) {
+    throw std::runtime_error(std::string(name) + ": expected '" + std::string(expected) +
+                             "', got '" + std::string(actual) + "'");
+  }
+}
+
+void Expect(bool condition, std::string_view name) {
+  if (!condition) {
+    throw std::runtime_error(std::string(name) + ": condition failed");
+  }
+}
+
+void TestDestinations() {
+  using hoku::ResolveDestination;
+  ExpectEqual(ResolveDestination("  https://example.com/a?x=1  "),
+              "https://example.com/a?x=1", "trimmed URL");
+  ExpectEqual(ResolveDestination("example.com/docs"), "https://example.com/docs", "domain");
+  ExpectEqual(ResolveDestination("example.com:8080/docs"), "https://example.com:8080/docs",
+              "domain port");
+  ExpectEqual(ResolveDestination("intranet:8080"), "https://intranet:8080", "intranet port");
+  ExpectEqual(ResolveDestination("localhost:3000"), "http://localhost:3000", "localhost");
+  ExpectEqual(ResolveDestination("127.0.0.1:8000"), "http://127.0.0.1:8000", "loopback IP");
+  ExpectEqual(ResolveDestination("mailto:user@example.com"), "mailto:user@example.com",
+              "existing scheme");
+  ExpectEqual(ResolveDestination("//example.com"), "https://example.com", "relative scheme");
+  ExpectEqual(ResolveDestination("C++ tutorial"),
+              "https://www.google.com/search?q=C%2B%2B%20tutorial", "encoded search");
+  ExpectEqual(ResolveDestination("中文 搜索"),
+              "https://www.google.com/search?q=%E4%B8%AD%E6%96%87%20%E6%90%9C%E7%B4%A2",
+              "UTF-8 search");
+  ExpectEqual(ResolveDestination(" \t "), "", "empty input");
+}
+
+void TestSession() {
+  hoku::BrowserSession session;
+  Expect(session.Tabs().size() == 1, "initial tab count");
+  const hoku::TabId first = session.ActiveTab();
+  const hoku::TabId second = session.NewTab();
+  const hoku::TabId third = session.NewTab();
+  Expect(session.ActiveTab() == third, "new tab becomes active");
+
+  Expect(session.SelectTab(second), "select existing tab");
+  Expect(!session.SelectTab(second), "reselect is a no-op");
+  Expect(session.CloseTab(second), "close active middle tab");
+  Expect(session.ActiveTab() == third, "next tab inherits active state");
+  Expect(session.Tabs().size() == 2, "middle tab removed");
+
+  Expect(session.CloseTab(third), "close active last tab");
+  Expect(session.ActiveTab() == first, "previous tab inherits active state");
+  Expect(!session.CloseTab(third), "missing close is a no-op");
+
+  Expect(session.UpdateTab(first, "https://example.com", "Example"), "update metadata");
+  Expect(!session.UpdateTab(first, "https://example.com", "Example"), "metadata no-op");
+  Expect(session.Tabs().front().title == "Example", "page title used");
+  Expect(session.UpdateTab(first, "about:blank", ""), "fallback title changed");
+  Expect(session.Tabs().front().title == "about:blank", "URL fallback title");
+
+  Expect(session.CloseTab(first), "close final tab");
+  Expect(session.Tabs().size() == 1, "closing final tab creates replacement");
+  Expect(session.Tabs().front().id != first, "replacement has fresh identity");
+  Expect(session.ActiveTab() == session.Tabs().front().id, "replacement is active");
+  Expect(session.Tabs().front().url.empty(), "replacement starts empty");
+}
+
+} // namespace
+
+int main() {
+  try {
+    TestDestinations();
+    TestSession();
+  } catch (const std::exception& error) {
+    std::cerr << error.what() << '\n';
+    return 1;
+  }
+  std::cout << "Hoku core tests passed\n";
+  return 0;
+}

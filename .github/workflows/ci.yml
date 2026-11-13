@@ -1,0 +1,161 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      package:
+        description: Build and upload platform release archives
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hoku-ci-${{ github.workflow_ref }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HUXERUI_REPO: https://github.com/FarnaHerry/HuxerUI.git
+  HUXERUI_COMMIT: a559c7880daa1402a23357ed049d2944428a9b44
+
+jobs:
+  linux:
+    name: linux-x86_64
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build pkg-config libgtk-4-dev libepoxy-dev libsoup-3.0-dev \
+            libwebkitgtk-6.0-dev
+
+      - name: Fetch pinned HuxerUI fork
+        run: |
+          git clone --filter=blob:none "$HUXERUI_REPO" .deps/HuxerUI
+          git -C .deps/HuxerUI checkout "$HUXERUI_COMMIT"
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DHUXERUI_HOME="$GITHUB_WORKSPACE/.deps/HuxerUI"
+
+      - name: Build
+        run: cmake --build build --target hoku hoku_core_tests --parallel 2
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --no-tests=error
+
+      - name: Package release archive
+        if: inputs.package
+        run: |
+          set -euo pipefail
+          test -x build/hoku
+          test -d build/hoku.resources
+          mkdir -p dist/bundle
+          cp build/hoku dist/bundle/
+          cp -a build/hoku.resources dist/bundle/
+          tar -C dist/bundle -czf dist/hoku-linux-x86_64.tar.gz hoku hoku.resources
+
+      - name: Upload release archive
+        if: inputs.package
+        uses: actions/upload-artifact@v4
+        with:
+          name: hoku-linux-x86_64
+          path: dist/hoku-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: windows-x86_64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned HuxerUI fork
+        shell: bash
+        run: |
+          git clone --filter=blob:none "$HUXERUI_REPO" .deps/HuxerUI
+          git -C .deps/HuxerUI checkout "$HUXERUI_COMMIT"
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 \
+            -DHUXERUI_HOME="$(cygpath -m "$PWD/.deps/HuxerUI")"
+
+      - name: Build
+        run: cmake --build build --config Release --target hoku hoku_core_tests --parallel 2
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure --no-tests=error
+
+      - name: Package release archive
+        if: inputs.package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Get-ChildItem -Path build -Recurse -Filter hoku.exe | Select-Object -First 1
+          if (-not $exe) { throw 'hoku.exe not found' }
+          $resources = Join-Path $exe.Directory.FullName 'hoku.resources'
+          if (-not (Test-Path $resources -PathType Container)) { throw 'hoku.resources not found' }
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Compress-Archive -Path $exe.FullName, $resources -DestinationPath dist/hoku-windows-x86_64.zip
+
+      - name: Upload release archive
+        if: inputs.package
+        uses: actions/upload-artifact@v4
+        with:
+          name: hoku-windows-x86_64
+          path: dist/hoku-windows-x86_64.zip
+          if-no-files-found: error
+
+  macos:
+    name: macos-arm64
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: brew install ninja
+
+      - name: Fetch pinned HuxerUI fork
+        run: |
+          git clone --filter=blob:none "$HUXERUI_REPO" .deps/HuxerUI
+          git -C .deps/HuxerUI checkout "$HUXERUI_COMMIT"
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DHUXERUI_HOME="$GITHUB_WORKSPACE/.deps/HuxerUI"
+
+      - name: Build
+        run: cmake --build build --target hoku hoku_core_tests --parallel 2
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --no-tests=error
+
+      - name: Package release archive
+        if: inputs.package
+        run: |
+          set -euo pipefail
+          app=$(find build -type d -name hoku.app -print -quit)
+          test -n "$app"
+          mkdir -p dist
+          ditto -c -k --keepParent "$app" dist/hoku-macos-arm64.zip
+
+      - name: Upload release archive
+        if: inputs.package
+        uses: actions/upload-artifact@v4
+        with:
+          name: hoku-macos-arm64
+          path: dist/hoku-macos-arm64.zip
+          if-no-files-found: error
