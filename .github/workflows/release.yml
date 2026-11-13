@@ -31,7 +31,7 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           pattern: hoku-*
-          merge: true
+          merge-multiple: true
 
       - name: Verify release assets
         shell: bash
