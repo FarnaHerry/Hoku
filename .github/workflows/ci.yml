@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      package:
+        description: Build and upload platform release archives
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       package:
