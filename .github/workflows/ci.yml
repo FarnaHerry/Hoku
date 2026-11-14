@@ -45,22 +45,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             binutils dpkg-dev fakeroot
 
-      - name: Install pinned patchelf
-        if: inputs.package
-        run: |
-          set -euo pipefail
-          patchelf_archive="$RUNNER_TEMP/patchelf-0.19.2-x86_64.tar.gz"
-          patchelf_root="$RUNNER_TEMP/huxerui-patchelf"
-          curl --fail --location --retry 3 \
-            https://github.com/NixOS/patchelf/releases/download/0.19.2/patchelf-0.19.2-x86_64.tar.gz \
-            --output "$patchelf_archive"
-          echo "2abdc34fbe949c995a1baa4ec310896a085588a45a99cd0d726851bdfac2a4bb  $patchelf_archive" \
-            | sha256sum --check --status
-          mkdir -p "$patchelf_root"
-          tar -xzf "$patchelf_archive" -C "$patchelf_root"
-          printf '%s\n' "$patchelf_root/bin" >> "$GITHUB_PATH"
-          "$patchelf_root/bin/patchelf" --version
-
       - name: Fetch pinned HuxerUI fork
         run: |
           git clone --filter=blob:none "$HUXERUI_REPO" .deps/HuxerUI
@@ -128,6 +112,31 @@ jobs:
           test -s dist/hoku-linux-x86_64.AppImage
           test -s dist/hoku-linux-x86_64.deb
 
+          work="$RUNNER_TEMP/hoku-package-check"
+          rm -rf "$work"
+          mkdir -p "$work/appimage"
+          dpkg-deb --fsys-tarfile dist/hoku-linux-x86_64.deb | tar -tf - > "$work/deb-files.txt"
+          grep -qx './usr/lib/dev.farna.hoku/bin/hoku' "$work/deb-files.txt"
+          grep -qx './usr/lib/dev.farna.hoku/bin/hoku.resources/huxerui/resources.bin' "$work/deb-files.txt"
+          if grep -Eq '(^|/)lib(webkitgtk|javascriptcoregtk)-6\.0\.so' "$work/deb-files.txt"; then
+            echo 'DEB must not bundle WebKitGTK' >&2
+            exit 1
+          fi
+          dpkg-deb -f dist/hoku-linux-x86_64.deb Depends | grep -q 'libwebkitgtk-6.0-4'
+
+          (cd "$work/appimage" && env -u APPIMAGE_EXTRACT_AND_RUN \
+            "$GITHUB_WORKSPACE/dist/hoku-linux-x86_64.AppImage" --appimage-extract >/dev/null)
+          appdir="$work/appimage/squashfs-root"
+          test -x "$appdir/usr/bin/hoku"
+          test -f "$appdir/usr/bin/hoku.resources/huxerui/resources.bin"
+          if find "$appdir" -type f \
+              \( -name 'libwebkitgtk-6.0.so*' -o -name 'libjavascriptcoregtk-6.0.so*' \) \
+              | grep -q .; then
+            echo 'AppImage must not bundle WebKitGTK' >&2
+            exit 1
+          fi
+          ls -lh dist/hoku-linux-x86_64.AppImage dist/hoku-linux-x86_64.deb
+
       - name: Upload Linux packages
         if: inputs.package
         uses: actions/upload-artifact@v7
@@ -158,21 +167,6 @@ jobs:
             binutils cmake curl gcc-c++ gtk4-devel libepoxy-devel libsoup3-devel \
             ninja-build pkgconf-pkg-config rpm-build webkitgtk6.0-devel
 
-      - name: Install pinned patchelf
-        run: |
-          set -euo pipefail
-          patchelf_archive="$RUNNER_TEMP/patchelf-0.19.2-x86_64.tar.gz"
-          patchelf_root="$RUNNER_TEMP/huxerui-patchelf"
-          curl --fail --location --retry 3 \
-            https://github.com/NixOS/patchelf/releases/download/0.19.2/patchelf-0.19.2-x86_64.tar.gz \
-            --output "$patchelf_archive"
-          echo "2abdc34fbe949c995a1baa4ec310896a085588a45a99cd0d726851bdfac2a4bb  $patchelf_archive" \
-            | sha256sum --check --status
-          mkdir -p "$patchelf_root"
-          tar -xzf "$patchelf_archive" -C "$patchelf_root"
-          printf '%s\n' "$patchelf_root/bin" >> "$GITHUB_PATH"
-          "$patchelf_root/bin/patchelf" --version
-
       - name: Fetch pinned HuxerUI fork
         run: |
           git clone --filter=blob:none "$HUXERUI_REPO" .deps/HuxerUI
@@ -198,7 +192,16 @@ jobs:
             -D "CPACK_PACKAGE_VERSION=$version" \
             -D CPACK_PACKAGE_FILE_NAME=hoku-linux-x86_64
           test -s dist/hoku-linux-x86_64.rpm
-          rpm -qpR dist/hoku-linux-x86_64.rpm
+          rpm -qpl dist/hoku-linux-x86_64.rpm > "$RUNNER_TEMP/hoku-rpm-files.txt"
+          grep -qx '/usr/lib/dev.farna.hoku/bin/hoku' "$RUNNER_TEMP/hoku-rpm-files.txt"
+          grep -qx '/usr/lib/dev.farna.hoku/bin/hoku.resources/huxerui/resources.bin' "$RUNNER_TEMP/hoku-rpm-files.txt"
+          if grep -Eq '(^|/)lib(webkitgtk|javascriptcoregtk)-6\.0\.so' "$RUNNER_TEMP/hoku-rpm-files.txt"; then
+            echo 'RPM must not bundle WebKitGTK' >&2
+            exit 1
+          fi
+          rpm -qpR dist/hoku-linux-x86_64.rpm > "$RUNNER_TEMP/hoku-rpm-requires.txt"
+          grep -q 'webkitgtk6\.0' "$RUNNER_TEMP/hoku-rpm-requires.txt"
+          rpm -qip dist/hoku-linux-x86_64.rpm
 
       - name: Upload RPM
         uses: actions/upload-artifact@v7

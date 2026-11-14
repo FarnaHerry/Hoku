@@ -11,9 +11,11 @@ function(huxerui_configure_linux_project_package target_name install_component)
             RUNTIME DESTINATION "${package_directory}/bin"
             COMPONENT "${install_component}"
     )
-    _huxerui_install_runtime_dependencies(${target_name} "${install_component}"
-            "${package_directory}" "bin/$<TARGET_FILE_NAME:${target_name}>"
-    )
+    # HuxerUI's Linux package is the application payload only. GTK, WebKitGTK,
+    # and their dependency closure are distribution runtimes: DEB/RPM declare
+    # them in package metadata and AppImage documents them as host requirements.
+    # Deploying the closure here duplicated WebKitGTK (and over 200 MB of
+    # private libraries) inside every package.
     get_target_property(HUXERUI_LINUX_APP_RESOURCES
             ${target_name}
             HUXERUI_RESOURCE_PACKAGE
@@ -59,8 +61,6 @@ set(CPACK_RPM_PACKAGE_REQUIRES "gtk4 >= 4.14, webkitgtk6.0, librsvg2")
 set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
         /usr/share/applications /usr/share/icons /usr/share/icons/hicolor
         /usr/share/icons/hicolor/scalable /usr/share/icons/hicolor/scalable/apps)
-set(HUXERUI_PACKAGE_APP_DIRECTORY "@package_directory@")
-set(CPACK_PRE_BUILD_SCRIPTS "@CMAKE_CURRENT_FUNCTION_LIST_DIR@/package/rpm_dependencies.cmake")
 ]=] @ONLY)
         return()
     endif ()

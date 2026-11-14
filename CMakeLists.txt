@@ -8,7 +8,7 @@ if (CMAKE_HOST_APPLE AND (NOT CMAKE_SYSTEM_NAME OR CMAKE_SYSTEM_NAME STREQUAL "D
     set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS deployment target")
 endif ()
 
-project(hoku VERSION 0.1.1 LANGUAGES NONE)
+project(hoku VERSION 0.1.2 LANGUAGES NONE)
 
 include(CTest)
 

@@ -81,8 +81,8 @@ CI builds and tests Linux x86_64, Windows x86_64, and macOS arm64 on main-branch
 Pushing a `v*` tag runs the same matrix through the Release workflow and creates a GitHub release with generated notes:
 
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.1.2
+git push origin v0.1.2
 ```
 
 Release assets:
@@ -92,7 +92,7 @@ Release assets:
 - Windows: `hoku-windows-x86_64-setup.exe` (Burn installer) and `hoku-windows-x86_64.zip`.
 - macOS: `hoku-macos-arm64.zip` with the unsigned `hoku.app` bundle.
 
-The AppImage and portable Windows archive still require the distribution GTK/WebKitGTK runtime and the WebView2 Runtime respectively. DEB and RPM declare their distribution dependencies so APT/DNF install them. Package generation is restricted to tag releases and can require `appimagetool`, CPack tooling, `patchelf >= 0.19`, and WiX/.NET on the build machines.
+The AppImage and portable Windows archive still require the distribution GTK/WebKitGTK runtime and the WebView2 Runtime respectively. Linux packages contain only the Hoku executable, its resource bundle, and desktop metadata; WebKitGTK and the rest of the desktop stack remain distribution-owned. DEB and RPM declare their distribution dependencies so APT/DNF install them. Package generation is restricted to tag releases and can require `appimagetool`, CPack tooling, and WiX/.NET on the build machines.
 
 ## License
 
