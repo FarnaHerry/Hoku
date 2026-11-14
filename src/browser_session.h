@@ -9,8 +9,16 @@ namespace hoku {
 
 using TabId = std::uint64_t;
 
+enum class TabKind {
+  Web,
+  Settings,
+};
+
+inline constexpr char kSettingsUrl[] = "hoku://settings";
+
 struct TabInfo {
   TabId id = 0;
+  TabKind kind = TabKind::Web;
   std::string title = "New tab";
   std::string url;
 };
@@ -24,6 +32,7 @@ public:
   [[nodiscard]] std::size_t ActiveIndex() const noexcept;
 
   TabId NewTab();
+  TabId OpenSettings();
   bool SelectTab(TabId id);
   bool CloseTab(TabId id);
   bool UpdateTab(TabId id, std::string url, std::string title);

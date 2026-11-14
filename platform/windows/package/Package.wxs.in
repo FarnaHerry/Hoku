@@ -22,14 +22,14 @@
                 Target="[INSTALLFOLDER]hoku.exe" WorkingDirectory="INSTALLFOLDER"
                 Icon="ApplicationIcon" />
       <RemoveFolder Id="RemoveApplicationProgramMenu" On="uninstall" />
-      <RegistryValue Root="HKLM" Key="Software\dev.farna.hoku\Hoku" Name="installed"
+      <RegistryValue Root="HKCU" Key="Software\dev.farna.hoku\Hoku" Name="installed"
                      Type="integer" Value="1" KeyPath="yes" />
     </Component>
     <Component Id="ApplicationDesktopShortcut" Directory="DesktopFolder">
       <Shortcut Id="ApplicationDesktopShortcutLink" Name="Hoku"
                 Target="[INSTALLFOLDER]hoku.exe" WorkingDirectory="INSTALLFOLDER"
                 Icon="ApplicationIcon" />
-      <RegistryValue Root="HKLM" Key="Software\dev.farna.hoku\Hoku" Name="desktopShortcut"
+      <RegistryValue Root="HKCU" Key="Software\dev.farna.hoku\Hoku" Name="desktopShortcut"
                      Type="integer" Value="1" KeyPath="yes" />
     </Component>
 

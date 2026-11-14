@@ -40,7 +40,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          assets=(hoku-linux-x86_64.tar.gz hoku-windows-x86_64.zip hoku-macos-arm64.zip)
+          assets=(hoku-linux-x86_64.AppImage hoku-linux-x86_64.deb hoku-linux-x86_64.rpm \
+            hoku-windows-x86_64-setup.exe hoku-windows-x86_64.zip hoku-macos-arm64.zip)
           for asset in "${assets[@]}"; do
             test -s "$asset"
           done
@@ -52,7 +53,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          assets=(hoku-linux-x86_64.tar.gz hoku-windows-x86_64.zip hoku-macos-arm64.zip)
+          assets=(hoku-linux-x86_64.AppImage hoku-linux-x86_64.deb hoku-linux-x86_64.rpm \
+            hoku-windows-x86_64-setup.exe hoku-windows-x86_64.zip hoku-macos-arm64.zip)
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
           else

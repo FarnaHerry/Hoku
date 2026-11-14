@@ -1,0 +1,3 @@
+platform/linux/package/AppRun text eol=lf
+platform/linux/package/*.desktop text eol=lf
+*.sh text eol=lf

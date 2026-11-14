@@ -8,7 +8,9 @@ if (CMAKE_HOST_APPLE AND (NOT CMAKE_SYSTEM_NAME OR CMAKE_SYSTEM_NAME STREQUAL "D
     set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS deployment target")
 endif ()
 
-project(hoku VERSION 0.1.0 LANGUAGES NONE)
+project(hoku VERSION 0.1.1 LANGUAGES NONE)
+
+include(CTest)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 20)
@@ -89,7 +91,7 @@ else ()
     huxerui_use_library(hoku
             TARGET HuxerUI::WebView
             URL "https://github.com/FarnaHerry/Lib-WebView.git"
-            COMMIT "bcd6776851fd3b582e654c8b31b63822e31af117"
+            COMMIT "3353b585d06b2184bb9bb6fac4451d026a419f1f"
     )
 endif ()
 
@@ -97,7 +99,6 @@ if (APPLE AND NOT IOS AND NOT HUXERUI_LIBRARY_GRAPH_ONLY)
     target_link_libraries(hoku PRIVATE "-framework Foundation" "-framework AppKit")
 endif ()
 
-include(CTest)
 if (BUILD_TESTING AND NOT HUXERUI_LIBRARY_GRAPH_ONLY)
     add_executable(hoku_core_tests
             tests/browser_core_test.cpp
@@ -105,6 +106,38 @@ if (BUILD_TESTING AND NOT HUXERUI_LIBRARY_GRAPH_ONLY)
             src/destination.cpp
     )
     target_compile_features(hoku_core_tests PRIVATE cxx_std_20)
+    if (MSVC)
+        target_compile_options(hoku_core_tests PRIVATE /utf-8)
+    endif ()
     target_include_directories(hoku_core_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     add_test(NAME hoku_core COMMAND hoku_core_tests)
+
+    if (TARGET HuxerUI::testing)
+        huxerui_add_app(hoku_ui_tests
+                SOURCES
+                    tests/browser_ui_test.cpp
+                    src/app.cpp
+                    src/browser_session.cpp
+                    src/browser_settings.cpp
+                    src/browser_tabs.cpp
+                    src/browser_ui.cpp
+                    src/destination.cpp
+                    src/favicon.cpp
+                RESOURCES
+                    resources
+                RESOURCE_NAMESPACE
+                    app
+                ${HUXERUI_APP_RESOURCE_OUTPUT_ARGUMENTS}
+        )
+        target_compile_features(hoku_ui_tests PRIVATE cxx_std_20)
+        if (MSVC)
+            target_compile_options(hoku_ui_tests PRIVATE /utf-8)
+        endif ()
+        target_include_directories(hoku_ui_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+        target_link_libraries(hoku_ui_tests PRIVATE HuxerUI::WebView HuxerUI::testing)
+        get_target_property(HOKU_UI_TEST_PACKAGE hoku_ui_tests HUXERUI_RESOURCE_PACKAGE)
+        target_compile_definitions(hoku_ui_tests PRIVATE "HOKU_UI_TEST_PACKAGE=\"${HOKU_UI_TEST_PACKAGE}\"")
+        add_test(NAME hoku_ui COMMAND hoku_ui_tests)
+        set_tests_properties(hoku_ui PROPERTIES TIMEOUT 60)
+    endif ()
 endif ()

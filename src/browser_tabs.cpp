@@ -21,7 +21,21 @@ using namespace huxerui;
 constexpr float kPreferredTabWidth = 176.0F;
 constexpr float kMinimumTabWidth = 112.0F;
 constexpr float kNewTabWidth = 40.0F;
-constexpr double kTabMotionSeconds = 0.16;
+constexpr float kNewTabButtonSize = 32.0F;
+constexpr float kTabStripHeight = 40.0F;
+constexpr float kTabHeight = 34.0F;
+constexpr float kTabIconSize = 16.0F;
+constexpr float kTabTitleHeight = 20.0F;
+constexpr float kTabTitleAllowance = 80.0F;
+constexpr float kTabCloseButtonSize = 22.0F;
+constexpr float kTabHorizontalPadding = 8.0F;
+constexpr float kTabSpacing = 4.0F;
+constexpr float kTabCornerRadius = 10.0F;
+constexpr float kTabEntryOffsetX = 12.0F;
+constexpr float kTabHoverAlpha = 0.06F;
+constexpr float kGeometryTolerance = 0.5F;
+constexpr double kTabEntryMotionSeconds = 0.16;
+constexpr double kTabCloseMotionSeconds = 0.10;
 
 class MeasureSize {
 public:
@@ -39,8 +53,8 @@ public:
 
     FrameResult OnFrame(ViewNode& node, const FrameInfo&) override {
       const Rect bounds = node.Bounds();
-      if (std::abs(bounds.width - last_.width) <= 0.5F &&
-          std::abs(bounds.height - last_.height) <= 0.5F) {
+      if (std::abs(bounds.width - last_.width) <= kGeometryTolerance &&
+          std::abs(bounds.height - last_.height) <= kGeometryTolerance) {
         return {};
       }
       last_ = Size{bounds.width, bounds.height};
@@ -99,7 +113,14 @@ View BrowserTabTitle(const TabInfo& tab, float max_width) {
 }
 
 [[huxerui::composable]]
-View BrowserTabChip(const TabInfo& tab, bool active, State<BrowserSession> session, float width) {
+View BrowserTabChip(
+    const TabInfo& tab,
+    bool active,
+    State<BrowserSession> session,
+    State<FaviconMap> favicons,
+    std::optional<ImageAsset> favicon,
+    float width
+) {
   const ThemeSpec& theme = UseTheme();
   auto hovered = UseState(false);
   auto appeared = UseState(theme.motion.reduced_motion);
@@ -108,47 +129,53 @@ View BrowserTabChip(const TabInfo& tab, bool active, State<BrowserSession> sessi
   }, 0);
 
   const TweenSpec entry_motion{
-      .duration = theme.motion.reduced_motion ? 0.0 : kTabMotionSeconds,
+      .duration = theme.motion.reduced_motion ? 0.0 : kTabEntryMotionSeconds,
       .easing = Easing::EaseOut,
   };
   const TweenSpec close_motion{
-      .duration = theme.motion.reduced_motion ? 0.0 : 0.10,
+      .duration = theme.motion.reduced_motion ? 0.0 : kTabCloseMotionSeconds,
       .easing = Easing::EaseOut,
   };
   const bool close_visible = active || hovered.Get();
   Color hover_background = theme.colors.on_surface;
-  hover_background.alpha = 0.06F;
+  hover_background.alpha = kTabHoverAlpha;
   const Color background = active ? theme.colors.surface_container_highest
                                   : (hovered.Get() ? hover_background : Color::Transparent());
   const Color foreground = active ? theme.colors.on_surface : theme.colors.on_surface_variant;
-  const float title_width = std::max(0.0F, width - 80.0F);
+  const float title_width = std::max(0.0F, width - kTabTitleAllowance);
   const TabId id = tab.id;
 
+  Image tab_icon = favicon.has_value()
+                       ? Image(*favicon)
+                       : Image(tab.kind == TabKind::Settings ? app::images::settings : app::images::globe)
+                             .Tint(active ? theme.colors.primary : theme.colors.on_surface_variant);
+
   return Row {
-    Image(app::images::globe)
-        .Tint(active ? theme.colors.primary : theme.colors.on_surface_variant)
-        .With(Frame{.width = 16.0F, .height = 16.0F}),
+    std::move(tab_icon).With(Frame{.width = kTabIconSize, .height = kTabIconSize}),
     Row {
       BrowserTabTitle(tab, title_width),
-    }.With(Grow(), Frame{.height = 20.0F}, ClipChildren()),
+    }.With(Grow(), Frame{.height = kTabTitleHeight}, ClipChildren()),
     IconButton(app::images::close, "Close tab")
-        .OnClick([session, id] {
+        .OnClick([session, favicons, id] {
           session.Update([id](BrowserSession& current) {
             current.CloseTab(id);
           });
+          favicons.Update([id](FaviconMap& values) {
+            values.erase(id);
+          });
         })
         .With(
-            Frame{.width = 22.0F, .height = 22.0F},
+            Frame{.width = kTabCloseButtonSize, .height = kTabCloseButtonSize},
             Enabled(close_visible),
             Opacity(AnimateTo(close_visible ? 1.0F : 0.0F, close_motion)),
             Tooltip("Close tab")
         ),
   }.With(
-      Frame{.width = width, .height = 34.0F},
-      Padding(EdgeInsets::Symmetric(8.0F, 0.0F)),
-      Spacing(4.0F),
+      Frame{.width = width, .height = kTabHeight},
+      Padding(EdgeInsets::Symmetric(kTabHorizontalPadding, 0.0F)),
+      Spacing(kTabSpacing),
       CrossAlign(CrossAxisAlignment::Center),
-      CornerRadius(CornerRadii::Top(10.0F)),
+      CornerRadius(CornerRadii::Top(kTabCornerRadius)),
       Background(background),
       ClipChildren(),
       Foreground(foreground),
@@ -156,7 +183,7 @@ View BrowserTabChip(const TabInfo& tab, bool active, State<BrowserSession> sessi
       Semantics{.role = SemanticRole::Button, .label = tab.title},
       Opacity(AnimateTo(appeared.Get() ? 1.0F : 0.0F, entry_motion)),
       Offset(AnimateTo(
-          appeared.Get() ? Point{} : Point{12.0F, 0.0F}, entry_motion
+          appeared.Get() ? Point{} : Point{kTabEntryOffsetX, 0.0F}, entry_motion
       )),
       Tooltip(tab.url.empty() ? tab.title : tab.url)
   )
@@ -250,7 +277,7 @@ private:
 } // namespace
 
 [[huxerui::composable]]
-View BrowserTabStrip(State<BrowserSession> session) {
+View BrowserTabStrip(State<BrowserSession> session, State<FaviconMap> favicons) {
   auto scroll = UseScrollController();
   auto available_width = UseState(0.0F);
   const BrowserSession& snapshot = session.Get();
@@ -265,12 +292,25 @@ View BrowserTabStrip(State<BrowserSession> session) {
 
   Views tabs;
   std::size_t active_index = 0;
+  const FaviconMap& loaded_favicons = favicons.Get();
   for (std::size_t index = 0; index < count; ++index) {
     const TabInfo& tab = snapshot.Tabs()[index];
     if (tab.id == snapshot.ActiveTab()) {
       active_index = index;
     }
-    tabs.Add(BrowserTabChip(tab, tab.id == snapshot.ActiveTab(), session, tab_width));
+    const auto favicon = loaded_favicons.find(tab.id);
+    std::optional<ImageAsset> icon;
+    if (favicon != loaded_favicons.end()) {
+      icon = favicon->second;
+    }
+    tabs.Add(BrowserTabChip(
+        tab,
+        tab.id == snapshot.ActiveTab(),
+        session,
+        favicons,
+        std::move(icon),
+        tab_width
+    ));
   }
   tabs.Add(
       IconButton(app::images::add, "New tab")
@@ -279,7 +319,7 @@ View BrowserTabStrip(State<BrowserSession> session) {
               current.NewTab();
             });
           })
-          .With(Frame{.width = 32.0F, .height = 32.0F}, Tooltip("New tab"))
+          .With(Frame{.width = kNewTabButtonSize, .height = kNewTabButtonSize}, Tooltip("New tab"))
           .Key("new-tab")
   );
 
@@ -293,13 +333,13 @@ View BrowserTabStrip(State<BrowserSession> session) {
     )
         .ScrollAxis(Axis::Horizontal)
         .Controller(scroll)
-        .With(Frame{.height = 40.0F, .max_width = content_width}),
+        .With(Frame{.height = kTabStripHeight, .max_width = content_width}),
     Spacer().With(WindowDragRegion{}),
   }.With(
       Grow(),
       CrossAlign(CrossAxisAlignment::Stretch),
       MeasureSize([available_width](Size size) {
-        if (size.width > 0.0F && std::abs(size.width - available_width.Get()) > 0.5F) {
+        if (size.width > 0.0F && std::abs(size.width - available_width.Get()) > kGeometryTolerance) {
           available_width = size.width;
         }
       })

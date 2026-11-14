@@ -128,4 +128,27 @@ std::string ResolveDestination(std::string_view input) {
   return std::string(kSearchPrefix) + EncodeSearchQuery(value);
 }
 
+std::string HttpOrigin(std::string_view url) {
+  const std::size_t scheme_end = url.find("://");
+  if (scheme_end == std::string_view::npos) {
+    return {};
+  }
+  const std::string_view scheme = url.substr(0, scheme_end);
+  if (!StartsWithInsensitive("https", scheme) && !StartsWithInsensitive("http", scheme)) {
+    return {};
+  }
+  if (scheme.size() != 4 && scheme.size() != 5) {
+    return {};
+  }
+  const std::size_t authority_start = scheme_end + 3;
+  if (authority_start >= url.size()) {
+    return {};
+  }
+  const std::size_t authority_end = url.find_first_of("/?#", authority_start);
+  if (authority_end == authority_start) {
+    return {};
+  }
+  return std::string(url.substr(0, authority_end));
+}
+
 } // namespace hoku

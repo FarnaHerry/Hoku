@@ -5,7 +5,10 @@ Hoku is a lightweight desktop browser built with HuxerUI and Lib-WebView.
 ## Features
 
 - Chrome-style compact retained tabs with entry motion and a trailing new-tab button
+- Website favicons in web tabs, with safe fallback icons
 - URL and search input with local-address handling
+- Dedicated settings tab with appearance controls and circular-reveal theme switching
+- Chrome-style toolbar menu with settings access
 - Back, forward, reload, and stop
 - Page title, loading progress, and load-error retry
 - Light/dark switching with follow-system defaults
@@ -44,7 +47,7 @@ The pinned WebView fork revision includes the Linux backend. `HOKU_WEBVIEW_PATH`
 cmake -S . -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DHUXERUI_HOME=/path/to/FarnaHerry/HuxerUI
-cmake --build build --target hoku hoku_core_tests --parallel 8
+cmake --build build --target hoku hoku_core_tests hoku_ui_tests --parallel 8
 ctest --test-dir build --output-on-failure --no-tests=error
 ./build/hoku
 ```
@@ -57,7 +60,8 @@ Use the generated platform shell and select an installed HuxerUI SDK with `HUXER
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target hoku
+cmake --build build --config Release --target hoku hoku_core_tests hoku_ui_tests
+ctest --test-dir build -C Release --output-on-failure --no-tests=error
 ```
 
 On Windows, use a compatible generator and an MSVC development environment. Lib-WebView downloads its pinned WebView2 SDK unless `WEBVIEW2_SDK_ROOT` is set; running the application requires WebView2 Runtime.
@@ -74,14 +78,21 @@ For Linux CLI builds, export `HUXERUI_HOME` so the required framework fork is se
 ## CI and releases
 
 CI builds and tests Linux x86_64, Windows x86_64, and macOS arm64 on main-branch pushes and pull requests.
-Pushing a `v*` tag runs the same matrix through the Release workflow, packages each platform, and creates a GitHub release with generated notes:
+Pushing a `v*` tag runs the same matrix through the Release workflow and creates a GitHub release with generated notes:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
-Linux archives contain the executable and complete resource package; target machines still need the GTK/WebKitGTK runtime. Windows requires WebView2 Runtime. macOS archives contain the unsigned `hoku.app` bundle.
+Release assets:
+
+- Ubuntu 24.04: `hoku-linux-x86_64.AppImage` and `hoku-linux-x86_64.deb`.
+- Fedora 44: `hoku-linux-x86_64.rpm`.
+- Windows: `hoku-windows-x86_64-setup.exe` (Burn installer) and `hoku-windows-x86_64.zip`.
+- macOS: `hoku-macos-arm64.zip` with the unsigned `hoku.app` bundle.
+
+The AppImage and portable Windows archive still require the distribution GTK/WebKitGTK runtime and the WebView2 Runtime respectively. DEB and RPM declare their distribution dependencies so APT/DNF install them. Package generation is restricted to tag releases and can require `appimagetool`, CPack tooling, `patchelf >= 0.19`, and WiX/.NET on the build machines.
 
 ## License
 
@@ -93,11 +104,13 @@ Hoku is available under the MIT License. Third-party asset notices are in `NOTIC
 src/app.cpp                 Application and WebView installation
 src/browser_ui.cpp          Browser chrome and per-tab WebViews
 src/browser_tabs.*          Compact tabs, trailing new-tab button, reveal/entry motion
+src/browser_settings.*      Settings tab and appearance controls
 src/browser_session.*       Tab lifecycle and selection
 src/destination.*           Address/search parsing
+src/favicon.*               Website icon loading and cache
 platform/                   Native desktop shells and packaging
 resources/                  HuxerUI resources
-tests/                      Core regression tests
+tests/                      Core, UI-layout, and controller regression tests
 ```
 
 Development rules live in `AGENTS.md`.

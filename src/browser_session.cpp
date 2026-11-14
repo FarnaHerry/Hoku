@@ -33,6 +33,26 @@ TabId BrowserSession::NewTab() {
   return id;
 }
 
+TabId BrowserSession::OpenSettings() {
+  const auto existing = std::ranges::find_if(tabs_, [](const TabInfo& tab) {
+    return tab.kind == TabKind::Settings;
+  });
+  if (existing != tabs_.end()) {
+    active_id_ = existing->id;
+    return existing->id;
+  }
+
+  const TabId id = next_id_++;
+  tabs_.push_back(TabInfo{
+      .id = id,
+      .kind = TabKind::Settings,
+      .title = "Settings",
+      .url = kSettingsUrl,
+  });
+  active_id_ = id;
+  return id;
+}
+
 bool BrowserSession::SelectTab(TabId id) {
   const auto selected = std::ranges::find_if(tabs_, [id](const TabInfo& tab) {
     return tab.id == id;

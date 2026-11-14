@@ -23,7 +23,7 @@ concurrency:
 
 env:
   HUXERUI_REPO: https://github.com/FarnaHerry/HuxerUI.git
-  HUXERUI_COMMIT: eb190f3d7e20f29614042aec7bc59fe5143f29f7
+  HUXERUI_COMMIT: 913959d353b4413fec9c8928d1fa207e0ce15a7a
 
 jobs:
   linux:
@@ -37,7 +37,29 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             ninja-build pkg-config libgtk-4-dev libepoxy-dev libsoup-3.0-dev \
-            libwebkitgtk-6.0-dev
+            libwebkitgtk-6.0-dev libpango1.0-dev libfontconfig1-dev
+
+      - name: Install Linux packaging tools
+        if: inputs.package
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            binutils dpkg-dev fakeroot
+
+      - name: Install pinned patchelf
+        if: inputs.package
+        run: |
+          set -euo pipefail
+          patchelf_archive="$RUNNER_TEMP/patchelf-0.19.2-x86_64.tar.gz"
+          patchelf_root="$RUNNER_TEMP/huxerui-patchelf"
+          curl --fail --location --retry 3 \
+            https://github.com/NixOS/patchelf/releases/download/0.19.2/patchelf-0.19.2-x86_64.tar.gz \
+            --output "$patchelf_archive"
+          echo "2abdc34fbe949c995a1baa4ec310896a085588a45a99cd0d726851bdfac2a4bb  $patchelf_archive" \
+            | sha256sum --check --status
+          mkdir -p "$patchelf_root"
+          tar -xzf "$patchelf_archive" -C "$patchelf_root"
+          printf '%s\n' "$patchelf_root/bin" >> "$GITHUB_PATH"
+          "$patchelf_root/bin/patchelf" --version
 
       - name: Fetch pinned HuxerUI fork
         run: |
@@ -50,35 +72,153 @@ jobs:
             -DHUXERUI_HOME="$GITHUB_WORKSPACE/.deps/HuxerUI"
 
       - name: Build
-        run: cmake --build build --target hoku hoku_core_tests --parallel 2
+        run: cmake --build build --target hoku hoku_core_tests hoku_ui_tests --parallel 2
 
       - name: Test
         run: ctest --test-dir build --output-on-failure --no-tests=error
 
-      - name: Package release archive
+      - name: Package Linux artifacts
         if: inputs.package
         run: |
           set -euo pipefail
-          test -x build/hoku
-          test -d build/hoku.resources
-          mkdir -p dist/bundle
-          cp build/hoku dist/bundle/
-          cp -a build/hoku.resources dist/bundle/
-          tar -C dist/bundle -czf dist/hoku-linux-x86_64.tar.gz hoku hoku.resources
+          version=$(sed -nE 's/^project\(hoku VERSION ([0-9.]+).*/\1/p' CMakeLists.txt | head -1)
+          test -n "$version"
+          mkdir -p dist
 
-      - name: Upload release archive
+          cmake -S . -B build-linux-appimage -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DHUXERUI_HOME="$GITHUB_WORKSPACE/.deps/HuxerUI" \
+            -DHUXERUI_PACKAGE=ON -DHUXERUI_LINUX_SYSTEM_PACKAGE=OFF
+          cmake --build build-linux-appimage --target hoku --parallel 2
+          rm -rf dist/AppDir
+          cmake --install build-linux-appimage --prefix "$PWD/dist/AppDir" \
+            --component HuxerUIApplication
+          test -x dist/AppDir/usr/bin/hoku
+          test -f dist/AppDir/AppRun
+          test -f dist/AppDir/hoku.desktop
+
+          appimage_tool="$RUNNER_TEMP/appimagetool-x86_64.AppImage"
+          curl --fail --location --retry 3 \
+            --output "$appimage_tool" \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $appimage_tool" \
+            | sha256sum --check -
+          chmod +x "$appimage_tool"
+          (cd "$RUNNER_TEMP" && "$appimage_tool" --appimage-extract >/dev/null)
+          ARCH=x86_64 "$RUNNER_TEMP/squashfs-root/AppRun" \
+            "$PWD/dist/AppDir" "$PWD/dist/hoku-linux-x86_64.AppImage"
+          rm -rf dist/AppDir
+
+          cmake -S . -B build-linux-system -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DHUXERUI_HOME="$GITHUB_WORKSPACE/.deps/HuxerUI" \
+            -DHUXERUI_PACKAGE=ON -DHUXERUI_LINUX_SYSTEM_PACKAGE=ON
+          cmake --build build-linux-system --target hoku --parallel 2
+          rm -rf dist/linux-stage
+          cmake --install build-linux-system --prefix "$PWD/dist/linux-stage" \
+            --component HuxerUIApplication
+          test -f build-linux-system/huxerui-package/LinuxCPack.cmake
+
+          cpack -G DEB \
+            --config build-linux-system/huxerui-package/LinuxCPack.cmake \
+            -B "$PWD/dist" \
+            -D "CPACK_INSTALLED_DIRECTORIES=$PWD/dist/linux-stage;." \
+            -D "CPACK_PACKAGE_VERSION=$version" \
+            -D CPACK_PACKAGE_FILE_NAME=hoku-linux-x86_64
+          rm -rf dist/linux-stage
+
+          test -s dist/hoku-linux-x86_64.AppImage
+          test -s dist/hoku-linux-x86_64.deb
+
+      - name: Upload Linux packages
         if: inputs.package
         uses: actions/upload-artifact@v7
         with:
           name: hoku-linux-x86_64
-          path: dist/hoku-linux-x86_64.tar.gz
+          path: |
+            dist/hoku-linux-x86_64.AppImage
+            dist/hoku-linux-x86_64.deb
+          if-no-files-found: error
+
+  linux-rpm:
+    name: linux-x86_64-rpm
+    if: inputs.package
+    runs-on: ubuntu-24.04
+    container: fedora:44
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Bootstrap container
+        run: dnf install -y git tar gzip
+
+      - uses: actions/checkout@v7
+
+      - name: Install Fedora dependencies
+        run: |
+          dnf install -y \
+            binutils cmake curl gcc-c++ gtk4-devel libepoxy-devel libsoup3-devel \
+            ninja-build pkgconf-pkg-config rpm-build webkitgtk6.0-devel
+
+      - name: Install pinned patchelf
+        run: |
+          set -euo pipefail
+          patchelf_archive="$RUNNER_TEMP/patchelf-0.19.2-x86_64.tar.gz"
+          patchelf_root="$RUNNER_TEMP/huxerui-patchelf"
+          curl --fail --location --retry 3 \
+            https://github.com/NixOS/patchelf/releases/download/0.19.2/patchelf-0.19.2-x86_64.tar.gz \
+            --output "$patchelf_archive"
+          echo "2abdc34fbe949c995a1baa4ec310896a085588a45a99cd0d726851bdfac2a4bb  $patchelf_archive" \
+            | sha256sum --check --status
+          mkdir -p "$patchelf_root"
+          tar -xzf "$patchelf_archive" -C "$patchelf_root"
+          printf '%s\n' "$patchelf_root/bin" >> "$GITHUB_PATH"
+          "$patchelf_root/bin/patchelf" --version
+
+      - name: Fetch pinned HuxerUI fork
+        run: |
+          git clone --filter=blob:none "$HUXERUI_REPO" .deps/HuxerUI
+          git -C .deps/HuxerUI checkout "$HUXERUI_COMMIT"
+
+      - name: Package RPM
+        run: |
+          set -euo pipefail
+          version=$(sed -nE 's/^project\(hoku VERSION ([0-9.]+).*/\1/p' CMakeLists.txt | head -1)
+          test -n "$version"
+          cmake -S . -B build-linux-system -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DHUXERUI_HOME="$PWD/.deps/HuxerUI" \
+            -DHUXERUI_PACKAGE=ON -DHUXERUI_LINUX_SYSTEM_PACKAGE=ON
+          cmake --build build-linux-system --target hoku --parallel 2
+          rm -rf dist/linux-stage
+          mkdir -p dist
+          cmake --install build-linux-system --prefix "$PWD/dist/linux-stage" \
+            --component HuxerUIApplication
+          cpack -G RPM \
+            --config build-linux-system/huxerui-package/LinuxCPack.cmake \
+            -B "$PWD/dist" \
+            -D "CPACK_INSTALLED_DIRECTORIES=$PWD/dist/linux-stage;." \
+            -D "CPACK_PACKAGE_VERSION=$version" \
+            -D CPACK_PACKAGE_FILE_NAME=hoku-linux-x86_64
+          test -s dist/hoku-linux-x86_64.rpm
+          rpm -qpR dist/hoku-linux-x86_64.rpm
+
+      - name: Upload RPM
+        uses: actions/upload-artifact@v7
+        with:
+          name: hoku-linux-x86_64-rpm
+          path: dist/hoku-linux-x86_64.rpm
           if-no-files-found: error
 
   windows:
     name: windows-x86_64
     runs-on: windows-latest
+    env:
+      DOTNET_ROLL_FORWARD: Major
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v4
+        if: inputs.package
+        with:
+          dotnet-version: 8.0.x
 
       - name: Fetch pinned HuxerUI fork
         shell: bash
@@ -93,7 +233,7 @@ jobs:
             -DHUXERUI_HOME="$(cygpath -m "$PWD/.deps/HuxerUI")"
 
       - name: Build
-        run: cmake --build build --config Release --target hoku hoku_core_tests --parallel 2
+        run: cmake --build build --config Release --target hoku hoku_core_tests hoku_ui_tests --parallel 2
 
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure --no-tests=error
@@ -110,12 +250,96 @@ jobs:
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           Compress-Archive -Path $exe.FullName, $resources -DestinationPath dist/hoku-windows-x86_64.zip
 
-      - name: Upload release archive
+      - name: Build Windows installer
+        if: inputs.package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Invoke-Checked([string]$Command, [string[]]$Arguments) {
+            & $Command @Arguments
+            if ($LASTEXITCODE -ne 0) { throw "$Command failed with exit code $LASTEXITCODE" }
+          }
+
+          $versionMatch = Select-String -Path CMakeLists.txt -Pattern '^project\(hoku VERSION ([0-9.]+)'
+          if (-not $versionMatch) { throw 'Hoku project version not found' }
+          $version = $versionMatch.Matches[0].Groups[1].Value
+          $huxeruiHome = (Join-Path $PWD '.deps/HuxerUI').Replace('\', '/')
+          $wixRoot = Join-Path $PWD '.deps/wix'
+          $packageBuild = Join-Path $PWD 'build-windows-package'
+          $root = Join-Path $PWD 'dist/windows-package'
+          $applicationStage = Join-Path $root 'application'
+          $installerStage = Join-Path $root 'installer'
+          Remove-Item -Recurse -Force $packageBuild, $root -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+
+          Invoke-Checked -Command cmake -Arguments @(
+            '-S', '.', '-B', $packageBuild, '-A', 'x64',
+            "-DHUXERUI_HOME=$huxeruiHome",
+            '-DHUXERUI_PACKAGE=ON',
+            "-DHUXERUI_WIX_ROOT=$wixRoot"
+          )
+          Invoke-Checked -Command cmake -Arguments @(
+            '--build', $packageBuild, '--config', 'Release',
+            '--target', 'hoku', 'hoku_installer', '--parallel', '2'
+          )
+
+          $packagePlanPath = Join-Path $packageBuild 'huxerui-package/windows/Release/package.json'
+          $installerPlanPath = Join-Path $packageBuild 'huxerui-package/windows/Release/installer.json'
+          $packagePlan = Get-Content $packagePlanPath -Raw | ConvertFrom-Json
+          $installerPlan = Get-Content $installerPlanPath -Raw | ConvertFrom-Json
+
+          Invoke-Checked -Command cmake -Arguments @(
+            '--install', $packageBuild, '--config', 'Release',
+            '--prefix', $applicationStage,
+            '--component', $packagePlan.installComponent
+          )
+          Invoke-Checked -Command cmake -Arguments @(
+            '--install', $packageBuild, '--config', 'Release',
+            '--prefix', $installerStage,
+            '--component', $installerPlan.installComponent
+          )
+
+          $msi = Join-Path $root 'hoku.msi'
+          $payloadScript = Join-Path $PWD 'dist/windows-package/installer-payloads.wxs'
+          $projectShell = Join-Path $PWD 'platform/windows'
+          Invoke-Checked -Command $installerPlan.wix -Arguments @(
+            'build', $packagePlan.packageSource, '-arch', 'x64',
+            '-bindpath', "Application=$applicationStage",
+            '-bindpath', "Project=$projectShell",
+            '-out', $msi
+          )
+          Invoke-Checked -Command $installerPlan.wix -Arguments @(
+            'msi', 'validate', $msi
+          )
+          Invoke-Checked -Command cmake -Arguments @(
+            "-DHUXERUI_WIX_PAYLOAD_DIRECTORY=$installerStage",
+            "-DHUXERUI_WIX_PAYLOAD_EXECUTABLE=$($installerPlan.installer)",
+            "-DHUXERUI_WIX_PAYLOAD_OUTPUT=$payloadScript",
+            '-P', (Join-Path $PWD '.deps/HuxerUI/cmake/HuxerUIGenerateWixPayloads.cmake')
+          )
+
+          $setup = Join-Path $root 'hoku-Setup.exe'
+          Invoke-Checked -Command $installerPlan.wix -Arguments @(
+            'build', $packagePlan.bundleSource, $payloadScript, '-arch', 'x64',
+            '-bindpath', "Installer=$installerStage",
+            '-bindpath', "Package=$root",
+            '-bindpath', "Project=$projectShell",
+            '-out', $setup
+          )
+          Move-Item -Path $setup -Destination (Join-Path $PWD 'dist/hoku-windows-x86_64-setup.exe') -Force
+          if (-not (Test-Path 'dist/hoku-windows-x86_64-setup.exe' -PathType Leaf)) {
+            throw 'Windows setup executable was not created'
+          }
+          Write-Host "Built Hoku $version Windows setup"
+
+      - name: Upload Windows artifacts
         if: inputs.package
         uses: actions/upload-artifact@v7
         with:
           name: hoku-windows-x86_64
-          path: dist/hoku-windows-x86_64.zip
+          path: |
+            dist/hoku-windows-x86_64-setup.exe
+            dist/hoku-windows-x86_64.zip
           if-no-files-found: error
 
   macos:
@@ -138,7 +362,7 @@ jobs:
             -DHUXERUI_HOME="$GITHUB_WORKSPACE/.deps/HuxerUI"
 
       - name: Build
-        run: cmake --build build --target hoku hoku_core_tests --parallel 2
+        run: cmake --build build --target hoku hoku_core_tests hoku_ui_tests --parallel 2
 
       - name: Test
         run: ctest --test-dir build --output-on-failure --no-tests=error

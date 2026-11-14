@@ -40,6 +40,11 @@ void TestDestinations() {
               "https://www.google.com/search?q=%E4%B8%AD%E6%96%87%20%E6%90%9C%E7%B4%A2",
               "UTF-8 search");
   ExpectEqual(ResolveDestination(" \t "), "", "empty input");
+  using hoku::HttpOrigin;
+  ExpectEqual(HttpOrigin("https://example.com/a?q=1"), "https://example.com", "HTTPS origin");
+  ExpectEqual(HttpOrigin("http://example.com:8080/path"), "http://example.com:8080", "HTTP origin port");
+  ExpectEqual(HttpOrigin("mailto:user@example.com"), "", "non-HTTP origin");
+  ExpectEqual(HttpOrigin("https://"), "", "empty HTTP authority");
 }
 
 void TestSession() {
@@ -65,6 +70,17 @@ void TestSession() {
   Expect(session.Tabs().front().title == "Example", "page title used");
   Expect(session.UpdateTab(first, "about:blank", ""), "fallback title changed");
   Expect(session.Tabs().front().title == "about:blank", "URL fallback title");
+
+  const hoku::TabId settings = session.OpenSettings();
+  Expect(session.ActiveTab() == settings, "settings tab becomes active");
+  Expect(session.Tabs().size() == 2, "settings tab added");
+  Expect(session.Tabs().back().kind == hoku::TabKind::Settings, "settings tab kind");
+  Expect(session.Tabs().back().title == "Settings", "settings tab title");
+  Expect(session.Tabs().back().url == hoku::kSettingsUrl, "settings tab URL");
+  Expect(session.OpenSettings() == settings, "settings tab reused");
+  Expect(session.Tabs().size() == 2, "settings tab deduplicated");
+  Expect(session.CloseTab(settings), "close settings tab");
+  Expect(session.ActiveTab() == first, "web tab resumes after settings closes");
 
   Expect(session.CloseTab(first), "close final tab");
   Expect(session.Tabs().size() == 1, "closing final tab creates replacement");
