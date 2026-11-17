@@ -8,7 +8,7 @@ if (CMAKE_HOST_APPLE AND (NOT CMAKE_SYSTEM_NAME OR CMAKE_SYSTEM_NAME STREQUAL "D
     set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS deployment target")
 endif ()
 
-project(hoku VERSION 0.1.2 LANGUAGES NONE)
+project(hoku VERSION 0.1.3 LANGUAGES NONE)
 
 include(CTest)
 
@@ -91,7 +91,7 @@ else ()
     huxerui_use_library(hoku
             TARGET HuxerUI::WebView
             URL "https://github.com/FarnaHerry/Lib-WebView.git"
-            COMMIT "3353b585d06b2184bb9bb6fac4451d026a419f1f"
+            COMMIT "2e443888af319fd761db0fed44a0b78c8f0f63ae"
     )
 endif ()
 

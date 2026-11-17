@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,17 +32,23 @@ public:
   [[nodiscard]] const std::vector<TabInfo>& Tabs() const noexcept;
   [[nodiscard]] TabId ActiveTab() const noexcept;
   [[nodiscard]] std::size_t ActiveIndex() const noexcept;
+  [[nodiscard]] const TabInfo* FindTab(TabId id) const noexcept;
+  [[nodiscard]] BrowserSession WindowWithTab(TabInfo tab) const;
 
-  TabId NewTab();
+  TabId NewTab(std::string url = {});
   TabId OpenSettings();
   bool SelectTab(TabId id);
   bool CloseTab(TabId id);
+  bool InsertTab(TabInfo tab, std::optional<TabId> before = std::nullopt);
+  bool ReorderTab(TabId id, std::optional<TabId> before);
   bool UpdateTab(TabId id, std::string url, std::string title);
 
 private:
+  BrowserSession(TabInfo tab, std::shared_ptr<TabId> next_id);
+
   std::vector<TabInfo> tabs_;
   TabId active_id_ = 0;
-  TabId next_id_ = 1;
+  std::shared_ptr<TabId> next_id_ = std::make_shared<TabId>(1);
 };
 
 } // namespace hoku

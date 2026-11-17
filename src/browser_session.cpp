@@ -1,12 +1,18 @@
 #include "browser_session.h"
 
 #include <algorithm>
+#include <iterator>
 #include <utility>
 
 namespace hoku {
 
 BrowserSession::BrowserSession() {
   NewTab();
+}
+
+BrowserSession::BrowserSession(TabInfo tab, std::shared_ptr<TabId> next_id)
+    : active_id_(tab.id), next_id_(std::move(next_id)) {
+  tabs_.push_back(std::move(tab));
 }
 
 const std::vector<TabInfo>& BrowserSession::Tabs() const noexcept {
@@ -26,9 +32,18 @@ std::size_t BrowserSession::ActiveIndex() const noexcept {
              : static_cast<std::size_t>(std::distance(tabs_.begin(), active));
 }
 
-TabId BrowserSession::NewTab() {
-  const TabId id = next_id_++;
-  tabs_.push_back(TabInfo{.id = id});
+const TabInfo* BrowserSession::FindTab(TabId id) const noexcept {
+  const auto tab = std::ranges::find(tabs_, id, &TabInfo::id);
+  return tab == tabs_.end() ? nullptr : &*tab;
+}
+
+BrowserSession BrowserSession::WindowWithTab(TabInfo tab) const {
+  return BrowserSession(std::move(tab), next_id_);
+}
+
+TabId BrowserSession::NewTab(std::string url) {
+  const TabId id = (*next_id_)++;
+  tabs_.push_back(TabInfo{.id = id, .title = url.empty() ? "New tab" : url, .url = std::move(url)});
   active_id_ = id;
   return id;
 }
@@ -42,7 +57,7 @@ TabId BrowserSession::OpenSettings() {
     return existing->id;
   }
 
-  const TabId id = next_id_++;
+  const TabId id = (*next_id_)++;
   tabs_.push_back(TabInfo{
       .id = id,
       .kind = TabKind::Settings,
@@ -82,6 +97,33 @@ bool BrowserSession::CloseTab(TabId id) {
   if (was_active) {
     active_id_ = tabs_[std::min(closing_index, tabs_.size() - 1)].id;
   }
+  return true;
+}
+
+bool BrowserSession::InsertTab(TabInfo tab, std::optional<TabId> before) {
+  const auto insertion = before ? std::ranges::find(tabs_, *before, &TabInfo::id) : tabs_.end();
+  if ((before && insertion == tabs_.end()) || FindTab(tab.id)) {
+    return false;
+  }
+  const TabId id = tab.id;
+  tabs_.insert(insertion, std::move(tab));
+  active_id_ = id;
+  return true;
+}
+
+bool BrowserSession::ReorderTab(TabId id, std::optional<TabId> before) {
+  const auto tab = std::ranges::find(tabs_, id, &TabInfo::id);
+  const auto insertion = before ? std::ranges::find(tabs_, *before, &TabInfo::id) : tabs_.end();
+  if (tab == tabs_.end() || (before && insertion == tabs_.end()) ||
+      tab == insertion || std::next(tab) == insertion) {
+    return false;
+  }
+  if (tab < insertion) {
+    std::rotate(tab, std::next(tab), insertion);
+  } else {
+    std::rotate(insertion, tab, std::next(tab));
+  }
+  active_id_ = id;
   return true;
 }
 

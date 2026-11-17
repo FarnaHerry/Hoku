@@ -75,13 +75,16 @@ void RefreshFavicon(
     std::string url
 ) {
   std::string origin = HttpOrigin(url);
-  if (origin.empty() || origin == loaded_origin.Get()) {
+  if (origin == loaded_origin.Get()) {
     return;
   }
   loaded_origin = origin;
   favicons.Update([id](FaviconMap& values) {
     values.erase(id);
   });
+  if (origin.empty()) {
+    return;
+  }
   tasks.Launch(FetchFavicon(
       std::move(http),
       favicons,

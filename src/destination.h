@@ -5,6 +5,9 @@
 
 namespace hoku {
 
+/// Percent-encodes bytes outside the URL unreserved set.
+[[nodiscard]] std::string EncodeUrlComponent(std::string_view value);
+
 /// Converts address-bar input into a navigable URL or a web-search URL.
 /// An empty or whitespace-only input returns an empty string.
 [[nodiscard]] std::string ResolveDestination(std::string_view input);

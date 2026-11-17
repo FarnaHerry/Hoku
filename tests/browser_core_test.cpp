@@ -87,6 +87,26 @@ void TestSession() {
   Expect(session.Tabs().front().id != first, "replacement has fresh identity");
   Expect(session.ActiveTab() == session.Tabs().front().id, "replacement is active");
   Expect(session.Tabs().front().url.empty(), "replacement starts empty");
+
+  const hoku::TabId opener = session.ActiveTab();
+  const hoku::TabId linked = session.NewTab("https://example.com/linked");
+  Expect(session.ActiveTab() == linked && session.Tabs().size() == 2, "link opens an active new tab");
+  Expect(session.Tabs().front().id == opener && session.Tabs().front().url.empty(), "opener is retained");
+  ExpectEqual(session.Tabs().back().url, "https://example.com/linked", "link sets the new tab destination");
+
+  hoku::BrowserSession detached = session.WindowWithTab(*session.FindTab(linked));
+  Expect(session.CloseTab(linked), "detach removes tab from its original strip");
+  const hoku::TabId source_new = session.NewTab();
+  const hoku::TabId detached_new = detached.NewTab();
+  Expect(source_new != detached_new, "windows allocate distinct tab IDs");
+  Expect(!session.InsertTab(*detached.FindTab(linked), detached_new), "stale drop anchor leaves tabs in place");
+  Expect(session.InsertTab(*detached.FindTab(linked), opener), "merge inserts before the target tab");
+  Expect(detached.CloseTab(linked), "merge removes tab from the detached strip");
+  Expect(session.Tabs().front().id == linked && session.ActiveTab() == linked, "merge preserves and activates the moved tab");
+  ExpectEqual(session.Tabs().front().url, "https://example.com/linked", "merge preserves the URL");
+  Expect(!session.InsertTab(*session.FindTab(linked)), "a repeated drop cannot duplicate the tab");
+  Expect(session.ReorderTab(linked, std::nullopt), "same-window drop can move a tab to the end");
+  Expect(session.Tabs().back().id == linked, "reorder preserves the tab ID");
 }
 
 } // namespace

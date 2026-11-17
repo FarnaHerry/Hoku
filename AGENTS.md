@@ -29,14 +29,14 @@ Hoku 是使用 HuxerUI 和 Lib-WebView 的轻量级桌面浏览器，目标平�
 - 标签、末尾新建标签和主题切换放在 `WindowTitleBar`；平台 caption inset 与拖动区由框架处理，不复制平台常量或自绘窗口按钮。
 - 标签保持 Chrome 风格连续紧凑布局；新建按钮是最后一枚标签后的滚动项，选中标签按真实几何自动显现。入场动画服从 reduced-motion，不用逐帧 State 写入。
 - 主题覆盖使用 `std::optional<ThemeBrightness>`：空值跟随 `UseSystemThemeBrightness()`，点击后固定浅/深色；切换 palette 必须使用对应的 Flat light/dark factory。
-- WebView 在 `LoadFinished` 和主题依赖变化时注入同一 `ThemeSpec` 的 `color-scheme`、背景及前景色。只同步基础主题，不用反色滤镜覆盖站点图片或完整视觉设计。
+- WebView 通过 `WebViewProperties::theme_brightness` 接收当前 `ThemeSpec` 的浅色或深色偏好，由网站决定如何响应。
 - WebView 是没有固有尺寸的 PlatformView：保留 `Grow`、有界父布局和 `ClipChildren`，不增加圆角路径裁剪。
 - `NavigationChanged` 回写同一受控 URL；关闭标签后到达的更新按稳定 ID 查找失败并忽略。
 - 主动 `StopLoading` 与真实加载失败分开；不得用平台诊断码做跨平台错误分类。
 
 ## 依赖
 
-- WebView 使用 `FarnaHerry/Lib-WebView`，远端依赖在 CMake 中固定完整 commit；不要改成浮动分支。
+- WebView 使用 `FarnaHerry/Lib-WebView`，在 `farna/main` 维护依赖修复，Hoku 在 CMake 中固定已验证的完整 commit；不要改成浮动分支。
 - `HOKU_WEBVIEW_PATH` 是显式本地源码覆盖。固定 fork 提交必须保留 Linux WebKitGTK 后端；升级时先验证 HuxerUI PlatformView 与扩展 API 的兼容性。
 - Linux 还需要带 `huxerui/linux/platform_registry.h` 的 `FarnaHerry/HuxerUI` 源码；官方 0.4.0 SDK 不包含它。
 - 不在应用中复制框架或 WebView 补丁。依赖修复归各自 fork，验证后再更新 pin。

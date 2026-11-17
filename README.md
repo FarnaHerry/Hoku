@@ -5,6 +5,8 @@ Hoku is a lightweight desktop browser built with HuxerUI and Lib-WebView.
 ## Features
 
 - Chrome-style compact retained tabs with entry motion and a trailing new-tab button
+- Drag tabs to reorder or move them between browser windows
+- Search open tabs by title or address and hover over tabs for site details
 - Website favicons in web tabs, with safe fallback icons
 - URL and search input with local-address handling
 - Dedicated settings tab with appearance controls and circular-reveal theme switching
@@ -12,7 +14,7 @@ Hoku is a lightweight desktop browser built with HuxerUI and Lib-WebView.
 - Back, forward, reload, and stop
 - Page title, loading progress, and load-error retry
 - Light/dark switching with follow-system defaults
-- Matching WebView color scheme, base background, and foreground
+- Light or dark preference for websites that support it
 - Native web engines with JavaScript enabled
 
 | Platform | Web engine |
@@ -21,9 +23,11 @@ Hoku is a lightweight desktop browser built with HuxerUI and Lib-WebView.
 | macOS | WKWebView |
 | Linux | WebKitGTK 6.0 |
 
+Drag tabs left or right to reorder them. Closing the last tab closes its window. On desktops with native window positioning, dragging the only tab moves its window with the pointer. Dragging a tab out of a window with multiple tabs opens a window for that tab. Dragging into another tab strip moves the tab there immediately and closes the source window if it held only that tab. The tab context menu also offers **Move tab to new window**. Cross-window moves keep the address bar draft and reopen the current page in the receiving window's WebView.
+
 ## Dependencies
 
-Use CMake 3.20 or later, a C++20 compiler, and HuxerUI 0.4.0 or a compatible source checkout.
+Use CMake 3.20 or later, a C++20 compiler, and [FarnaHerry/HuxerUI](https://github.com/FarnaHerry/HuxerUI/tree/farna/main) from `farna/main`. CI pins the tested revision in `.github/workflows/ci.yml`.
 The default WebView dependency is a pinned commit from `FarnaHerry/Lib-WebView`.
 
 Linux additionally requires:
@@ -56,10 +60,10 @@ ctest --test-dir build --output-on-failure --no-tests=error
 
 ## Build on Windows or macOS
 
-Use the generated platform shell and select an installed HuxerUI SDK with `HUXERUI_HOME`, or omit it when the SDK is discoverable:
+Use the generated platform shell and select the compatible HuxerUI checkout with `HUXERUI_HOME`:
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DHUXERUI_HOME=/path/to/FarnaHerry/HuxerUI
 cmake --build build --config Release --target hoku hoku_core_tests hoku_ui_tests
 ctest --test-dir build -C Release --output-on-failure --no-tests=error
 ```
@@ -73,7 +77,7 @@ huxerui build linux
 huxerui run linux
 ```
 
-For Linux CLI builds, export `HUXERUI_HOME` so the required framework fork is selected.
+For CLI builds, export `HUXERUI_HOME` so the required framework fork is selected.
 
 ## CI and releases
 
@@ -81,8 +85,8 @@ CI builds and tests Linux x86_64, Windows x86_64, and macOS arm64 on main-branch
 Pushing a `v*` tag runs the same matrix through the Release workflow and creates a GitHub release with generated notes:
 
 ```bash
-git tag v0.1.2
-git push origin v0.1.2
+git tag v0.1.3
+git push origin v0.1.3
 ```
 
 Release assets:

@@ -87,7 +87,9 @@ bool LooksLikeHost(std::string_view value) {
          value.starts_with('[');
 }
 
-std::string EncodeSearchQuery(std::string_view value) {
+} // namespace
+
+std::string EncodeUrlComponent(std::string_view value) {
   constexpr std::array<char, 16> kHex = {
       '0', '1', '2', '3', '4', '5', '6', '7',
       '8', '9', 'A', 'B', 'C', 'D', 'E', 'F',
@@ -95,7 +97,8 @@ std::string EncodeSearchQuery(std::string_view value) {
   std::string encoded;
   encoded.reserve(value.size());
   for (const unsigned char byte : value) {
-    if (std::isalnum(byte) || byte == '-' || byte == '.' || byte == '_' || byte == '~') {
+    if ((byte >= '0' && byte <= '9') || (byte >= 'A' && byte <= 'Z') ||
+        (byte >= 'a' && byte <= 'z') || byte == '-' || byte == '.' || byte == '_' || byte == '~') {
       encoded.push_back(static_cast<char>(byte));
     } else {
       encoded.push_back('%');
@@ -105,8 +108,6 @@ std::string EncodeSearchQuery(std::string_view value) {
   }
   return encoded;
 }
-
-} // namespace
 
 std::string ResolveDestination(std::string_view input) {
   const std::string_view value = Trim(input);
@@ -125,7 +126,7 @@ std::string ResolveDestination(std::string_view input) {
   if (LooksLikeHost(value)) {
     return "https://" + std::string(value);
   }
-  return std::string(kSearchPrefix) + EncodeSearchQuery(value);
+  return std::string(kSearchPrefix) + EncodeUrlComponent(value);
 }
 
 std::string HttpOrigin(std::string_view url) {
