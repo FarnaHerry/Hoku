@@ -728,9 +728,11 @@ View BrowserTabChip(
           }).Scope(DragDropScope::Application),
           DropTarget::Accepts<BrowserTabDrag>().Scope(DragDropScope::Application)
       )
-      .On<DragSourceEvents::Ended>([detach_tab, session, id](const DragDropResult& result) {
-        if (result.released_outside_application && detach_tab && session->Tabs().size() > 1) {
-          detach_tab(id);
+      .On<DragSourceEvents::Ended>([detach_tab, session, id](const auto& result) {
+        if constexpr (requires { result.released_outside_application; }) {
+          if (result.released_outside_application && detach_tab && session->Tabs().size() > 1) {
+            detach_tab(id);
+          }
         }
       })
       .On<DropEvents<BrowserTabDrag>::Entered>(update_insertion)
